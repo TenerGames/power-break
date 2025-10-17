@@ -1,0 +1,17 @@
+res://Shared/Scripts/Character.cs
+res://addons/netfox_sharp/autoloads/NetworkEvents.cs
+res://addons/netfox_sharp/autoloads/NetworkTimeSynchronizer.cs
+res://addons/netfox_sharp/autoloads/NetfoxSharp.cs
+res://addons/netfox_sharp_extras/nodes/RewindableState.cs
+res://addons/netfox_sharp/autoloads/NetworkTime.cs
+res://addons/netfox_sharp/nodes/TickInterpolator.cs
+res://addons/netfox_sharp/NetfoxSharpPlugin.cs
+res://addons/netfox_sharp/nodes/RewindableAction.cs
+res://Server/Scripts/MainServerCombat.cs
+res://Shared/Scripts/Startup.cs
+res://Client/Scripts/MainClientCombat.cs
+res://Shared/Scripts/CombatPlayer.cs
+res://addons/netfox_sharp/autoloads/NetworkRollback.cs
+res://addons/netfox_sharp/nodes/StateSynchronizer.cs
+res://addons/netfox_sharp_extras/nodes/RewindableStateMachine.cs
+res://addons/netfox_sharp/nodes/RollbackSynchronizer.cs

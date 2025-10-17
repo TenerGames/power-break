@@ -1,0 +1,17 @@
+D:\Documents\power-break\.godot\mono\temp\bin\Debug\PowerBreak.deps.json
+D:\Documents\power-break\.godot\mono\temp\bin\Debug\PowerBreak.runtimeconfig.json
+D:\Documents\power-break\.godot\mono\temp\bin\Debug\PowerBreak.dll
+D:\Documents\power-break\.godot\mono\temp\bin\Debug\PowerBreak.pdb
+D:\Documents\power-break\.godot\mono\temp\bin\Debug\GodotSharp.dll
+D:\Documents\power-break\.godot\mono\temp\bin\Debug\GodotSharpEditor.dll
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.csproj.AssemblyReference.cache
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.GeneratedMSBuildEditorConfig.editorconfig
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.AssemblyInfoInputs.cache
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.AssemblyInfo.cs
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.csproj.CoreCompileInputs.cache
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.csproj.Up2Date
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.dll
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\refint\PowerBreak.dll
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.pdb
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.genruntimeconfig.cache
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\ref\PowerBreak.dll

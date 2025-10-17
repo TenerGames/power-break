@@ -1,0 +1,38 @@
+[gd_scene load_steps=4 format=3 uid="uid://deubt5tfybrt"]
+
+[ext_resource type="Script" uid="uid://c11d4qfa77cjh" path="res://Client/Scripts/MainClientCombat.cs" id="1_x0anw"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_2ii72"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ujcvs"]
+
+[node name="CombatTest" type="Node3D"]
+script = ExtResource("1_x0anw")
+
+[node name="Players" type="Node" parent="."]
+
+[node name="Characters" type="Node" parent="."]
+
+[node name="PlayerMultiplayerSpawner" type="MultiplayerSpawner" parent="."]
+_spawnable_scenes = PackedStringArray("uid://b852tgidjdrc3")
+spawn_path = NodePath("../Players")
+
+[node name="CharacterMultiplayerSpawner" type="MultiplayerSpawner" parent="."]
+_spawnable_scenes = PackedStringArray("uid://015yfa8q136h")
+spawn_path = NodePath("../Characters")
+
+[node name="Floor" type="MeshInstance3D" parent="."]
+transform = Transform3D(20, 0, 0, 0, 1, 0, 0, 0, 20, 0, 0, 0)
+mesh = SubResource("BoxMesh_2ii72")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="Floor"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor/StaticBody3D"]
+transform = Transform3D(0.99999994, 0, 0, 0, 1, 0, 0, 0, 0.99999994, 0, 0, 0)
+shape = SubResource("BoxShape3D_ujcvs")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.778936, 17.679035)
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.0030717365, 0.9999953, 0, -0.9999953, 0.0030717365, 0, 7.4093513, 0)

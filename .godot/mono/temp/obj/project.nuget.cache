@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "N9z2r4cxtVc=",
+  "success": true,
+  "projectFilePath": "D:\\Documents\\power-break\\PowerBreak.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Keven\\.nuget\\packages\\godot.sourcegenerators\\4.5.1\\godot.sourcegenerators.4.5.1.nupkg.sha512",
+    "C:\\Users\\Keven\\.nuget\\packages\\godotsharp\\4.5.1\\godotsharp.4.5.1.nupkg.sha512",
+    "C:\\Users\\Keven\\.nuget\\packages\\godotsharpeditor\\4.5.1\\godotsharpeditor.4.5.1.nupkg.sha512"
+  ],
+  "logs": []
+}

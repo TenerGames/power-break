@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://b852tgidjdrc3"]
+
+[ext_resource type="Script" uid="uid://c24iepwulnbsg" path="res://Shared/Scripts/CombatPlayer.cs" id="1_nbbu6"]
+
+[node name="CombatPlayer" type="Node"]
+script = ExtResource("1_nbbu6")

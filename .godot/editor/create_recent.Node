@@ -1,0 +1,13 @@
+MeshInstance3D
+CollisionShape3D
+CharacterBody3D
+MultiplayerSpawner
+Node
+MultiplayerSynchronizer
+Node3D
+DirectionalLight3D
+Camera3D
+StaticBody3D
+MultiplayerSpawner      - Matches the "network" keyword.
+OmniLight3D
+Window

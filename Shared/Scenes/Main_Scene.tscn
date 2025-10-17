@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://bu81c2l5j15kt"]
+
+[ext_resource type="Script" uid="uid://wsmp2s6poou3" path="res://Shared/Scripts/Startup.cs" id="1_k6ade"]
+
+[node name="Main" type="Node3D" node_paths=PackedStringArray("combatPlayers")]
+script = ExtResource("1_k6ade")
+combatPlayers = {}
