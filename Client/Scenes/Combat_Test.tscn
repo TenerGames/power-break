@@ -9,9 +9,15 @@
 [node name="CombatTest" type="Node3D"]
 script = ExtResource("1_x0anw")
 
+[node name="Pings" type="Node" parent="."]
+
 [node name="Players" type="Node" parent="."]
 
 [node name="Characters" type="Node" parent="."]
+
+[node name="PingSpawner" type="MultiplayerSpawner" parent="."]
+_spawnable_scenes = PackedStringArray("uid://th7ivxs2nesn")
+spawn_path = NodePath("../Pings")
 
 [node name="PlayerMultiplayerSpawner" type="MultiplayerSpawner" parent="."]
 _spawnable_scenes = PackedStringArray("uid://b852tgidjdrc3")

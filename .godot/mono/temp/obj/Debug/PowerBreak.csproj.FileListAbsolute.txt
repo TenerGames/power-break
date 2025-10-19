@@ -15,3 +15,4 @@ D:\Documents\power-break\.godot\mono\temp\obj\Debug\refint\PowerBreak.dll
 D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.pdb
 D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.genruntimeconfig.cache
 D:\Documents\power-break\.godot\mono\temp\obj\Debug\ref\PowerBreak.dll
+D:\Documents\power-break\.godot\mono\temp\obj\Debug\PowerBreak.sourcelink.json

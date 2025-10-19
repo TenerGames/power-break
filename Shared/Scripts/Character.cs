@@ -2,80 +2,79 @@ using Godot;
 using Godot.Collections;
 using System;
 using System.Collections.Generic;
-using System.Security.Cryptography.X509Certificates;
 
 public partial class Character : CharacterBody3D
 {
     [Export] public CombatPlayer playerOwner;
     [Export] Startup startup;
-    protected bool initialized = false;
+    [Export] public CollisionShape3D collisionShape3D;
+    private CapsuleShape3D capsuleShape3D;
+    private ShapeCast3D floorCast;
     protected RingBuffer<TransformState> transformStates;
     protected RingBuffer<InputState> inputStates;
-    protected ulong time;
-    protected ulong lastTime;
-    protected float defaultDelta;
-    protected ulong tickRate;
-    protected int currentTick;
-    protected int gravity = 10;
-    protected float speed = 2;
-    protected bool owner = false;
+    ulong tickRate;
+    ulong time;
+    ulong lastTime;
+    int currentTick = 0;
+    float speed = 2;
+    protected float tickDelta;
+    protected int tickOffset;
+    protected bool initialized = false;
+    protected float gravity = 20.0f;
+    protected bool jumpedlol = false;
+    protected float jumpPower = 200.0f;
 
-    protected bool floored = false;
-
-    //Server fields//
+    //Server Vars //
     Queue<InputState> clientInputs;
+    InputState lastProcessedInput;
+    protected int maxClientInputsAllowed = 20;
 
-    //Client fields//
-    protected InputState lastInputState;
-    protected TransformState lastServerProcessState;
-    
+    //Client vars//
+    TransformState lastReconciliationState;
+    TransformState currentReconciliationState;
+
     public override void _Ready()
     {
         base._Ready();
 
-        transformStates = new RingBuffer<TransformState>(1000);
-        inputStates = new RingBuffer<InputState>(1000);
-        currentTick = 0;
-        tickRate = 16;
-        defaultDelta = tickRate / 1000f;
+        Position = new Vector3(0, 1.5f, 0);
 
         startup = GetNode<Startup>("/root/Main");
-        Position = new Vector3I(0, 10, 0);
+        tickRate = 16;
+        tickDelta = 1f / 60f;
+        lastTime = Time.GetTicksMsec();
+        tickOffset = 0;
+        capsuleShape3D = collisionShape3D.Shape as CapsuleShape3D;
+
+        floorCast = new ShapeCast3D();
+        clientInputs = new Queue<InputState>();
+        transformStates = new RingBuffer<TransformState>(1000);
+        inputStates = new RingBuffer<InputState>(1000);
+
+        floorCast.Shape = new CapsuleShape3D
+        {
+            Height = capsuleShape3D.Height * 0.95F,
+            Radius = capsuleShape3D.Radius * 0.95F
+        };
+        floorCast.TargetPosition = new Vector3(0, -0.2f, 0);
+        AddChild(floorCast);
+        floorCast.Enabled = true;
+
+        SaveTick(currentTick, lastTime, new InputState(), true);
 
         if (Multiplayer.IsServer())
         {
-            clientInputs = new Queue<InputState>();
-            lastTime = Time.GetTicksMsec();
             initialized = true;
-        }else
-        {
-            lastServerProcessState.serverReconcilated = true;
         }
-    
+
         SetPhysicsProcess(true);
-    }
-
-    public override void _EnterTree()
-    {
-        base._EnterTree();
-
-        if (Multiplayer.IsServer())
-        {
-            SetMultiplayerAuthority((int)playerOwner.peerOwner,true);
-        }
-        else
-        {
-            RpcId(1, nameof(RequestPlayerAuthority));
-        }
     }
 
     public override void _Process(double delta)
     {
         base._Process(delta);
 
-        if (!initialized) return;
-
-        ulong currentTime = playerOwner.serverTimer.GetServerTime();
+        ulong currentTime = Time.GetTicksMsec();
 
         time += currentTime - lastTime;
         lastTime = currentTime;
@@ -85,159 +84,50 @@ public partial class Character : CharacterBody3D
     {
         base._PhysicsProcess(delta);
 
-        if (!initialized) return;
-
-        ulong currentTime = playerOwner.serverTimer.GetServerTime();
+        ulong currentTime = Time.GetTicksMsec();
 
         while (time >= tickRate)
         {
             time -= tickRate;
+            currentTick += 1;
 
             if (Multiplayer.IsServer())
             {
-                TickServer(defaultDelta, currentTick, currentTime, false);
+                TickServer(tickDelta, currentTick, currentTime);
             }
             else
             {
-                TickClient(defaultDelta, currentTick, currentTime);
+                if (!initialized)
+                {
+                    SaveTick(currentTick, currentTime, new InputState(), true);
+                }
+                else
+                {
+                    TickClient(tickDelta, currentTick, currentTime);
+                }
             }
-            
-            currentTick += 1;
         }
     }
 
-    //Request Authority Player
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    public void RequestPlayerAuthority()
+    public override void _EnterTree()
     {
-        RpcId(Multiplayer.GetRemoteSenderId(), nameof(ReceivePlayerAuthority), playerOwner.peerOwner);
-    }
+        base._EnterTree();
 
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    public void ReceivePlayerAuthority(long peerOwner)
-    {
-        playerOwner = startup.combatPlayers[peerOwner];
-        SetMultiplayerAuthority((int)peerOwner, true);
-
-        owner = peerOwner == Multiplayer.GetUniqueId();
-
-        RpcId(1, nameof(RequestCharacterSpawnState));
-    }
-
-    //Request Character Spawn Reconciliation
-
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    public async void RequestCharacterSpawnState()
-    {
-        await ToSignal(GetTree().CreateTimer(1f), SceneTreeTimer.SignalName.Timeout);
-        TransformState currentState = new();
-
-        bool got = transformStates.TryGetByTick(currentTick - 1, out currentState);
-
-        RpcId(Multiplayer.GetRemoteSenderId(), nameof(ReceiveCharacterSpawnState), currentState.ToDictionary());
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    public void ReceiveCharacterSpawnState(Dictionary transformDictionary)
-    {
-        SpawnReconciliation(TransformState.FromDictionary(transformDictionary));
-    }
-
-    //Inputs Replication
-
-    [Rpc(MultiplayerApi.RpcMode.Authority, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    public void ReceiveClientInput(Dictionary inputState)
-    {
-        clientInputs.Enqueue(InputState.FromDictionary(inputState));
-    }
-
-    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-    public void ReceivedClientReconciliation(Dictionary transformDictionary, int lastTick)
-    {
-        lastServerProcessState = TransformState.FromDictionary(transformDictionary);
-        lastServerProcessState.tickState.tick = lastTick;
-        lastServerProcessState.serverReconcilated = false;
-    }
-
-    //Server Methods//
-    public void TickServer(float delta, int currentTick, ulong currentTime, bool processingInputs)
-    {
-        TickGravity(delta);
-        ProcessInputState(lastInputState);
-        MoveAndSlide();
-        SaveTick(currentTick, currentTime);
-
-        if (!processingInputs)
+        if (Multiplayer.IsServer())
         {
-            ProcessClientInputs(delta);
-        }
-    }
-    
-    public void ProcessClientInputs(float delta)
-    {
-        TransformState currentTransform = new();
-        transformStates.TryGetByTick(currentTick, out currentTransform);
-
-        if (clientInputs.Count > 0)
+            SetMultiplayerAuthority((int)playerOwner.peerOwner, true);
+        }else
         {
-            InputState item = clientInputs.Dequeue();
-
-            lastInputState = new InputState(item.inputDirection, item.inputDirectionFraction, item.jumped, currentTransform.tickState);
-
-            TickServer(delta, currentTick, currentTransform.tickState.tickTimestamp, true);
-
-            transformStates.TryGetByTick(currentTick, out currentTransform);
-
-            RpcId(playerOwner.peerOwner, nameof(ReceivedClientReconciliation), currentTransform.ToDictionary(), currentTransform.tickState.tick);
+            RpcId(1, nameof(ClientRequestedFirstData));
         }
     }
 
-    //Client Methods//
-    public void TickClient(float delta, int currentTick, ulong currentTime)
+    // Client Methods //
+
+    public InputState GetInputState(ulong timeStamp, int processTick)
     {
-        TickGravity(delta);
-        bool newInput = CheckInputs(delta, currentTime);
-        ProcessInputState(lastInputState);
-        MoveAndSlide();
-        SaveTick(currentTick, currentTime);
-
-        if (newInput)
-        {
-            RpcId(1, nameof(ReceiveClientInput), lastInputState.ToDictionary());
-        }
-
-        if (!lastServerProcessState.serverReconcilated)
-        {
-            Reconciliation();
-        }
-    }
-
-    public void Reconciliation()
-    {
-        TransformState reconciliationState = new();
-
-        transformStates.TryGetByTick(lastServerProcessState.tickState.tick, out reconciliationState);
-        lastServerProcessState.serverReconcilated = true;
-
-        if (reconciliationState.position.DistanceTo(lastServerProcessState.position) >= 0.01)
-        {
-            GD.Print(reconciliationState.position.DistanceTo(lastServerProcessState.position));
-
-            //wll do later, but it shouldnt have reconcilations with 0 ms and a simple movement with no obstacles lol
-        }
-    }
-
-    public bool CheckInputs(float delta, ulong currentTime)
-    {
-        bool newInput = false;
-
-        if (!owner)
-        {
-            lastInputState = new InputState(Vector2I.Zero, Vector2I.Zero, false, new TickState(currentTick, currentTime));
-            return newInput;
-        }
-
         Vector2 inputDirectionFloat = Vector2.Zero;
+        bool jumped = false;
 
         if (Input.IsActionPressed("move_forward"))
             inputDirectionFloat.Y -= 1;
@@ -247,79 +137,284 @@ public partial class Character : CharacterBody3D
             inputDirectionFloat.X -= 1;
         if (Input.IsActionPressed("move_right"))
             inputDirectionFloat.X += 1;
+        if (Input.IsActionPressed("jump"))
+            jumped = true;
 
         inputDirectionFloat = inputDirectionFloat.Normalized() * speed;
 
         Array<Vector2I> vectorsDeterministiced = GetDirectionVectorsDeterministiced(inputDirectionFloat);
-        InputState newInputState = new InputState(vectorsDeterministiced[0], vectorsDeterministiced[1], false, new TickState(currentTick, currentTime));
+        return new InputState(vectorsDeterministiced[0], vectorsDeterministiced[1], jumped, new TickState(processTick, timeStamp));
+    }
 
-        if (newInputState != lastInputState)
+    public void ReconciliationClientTick(float delta, int processTick, ulong timeStamp)
+    {
+        InputState inputState = GetInputState(timeStamp,processTick);
+        ProcessInputState(inputState,processTick-1);
+        SimulateGravity(delta,-1);
+        MoveAndSlide();
+        SaveTick(processTick, timeStamp, inputState, IsOnFloorDeterministic(-1));
+    }
+
+    public void TickClient(float delta, int processTick, ulong timeStamp)
+    {
+        DoReconciliation();
+        InputState inputState = GetInputState(timeStamp,processTick);
+        ProcessInputState(inputState,processTick-1);
+        SimulateGravity(delta,processTick-1);
+        MoveAndSlide();
+        SaveTick(processTick, timeStamp, inputState, IsOnFloorDeterministic(-1));
+
+        RpcId(1, nameof(ReceiveClientInput), inputState.ToDictionary());
+    }
+
+    public void DoReconciliation()
+    {
+        int reconciliationTick = currentReconciliationState.tickState.tick;
+
+        if (reconciliationTick <= lastReconciliationState.tickState.tick) return;
+
+        lastReconciliationState.tickState.tick = reconciliationTick;
+
+        TransformState clientProcessedState = new();
+        InputState clientProcessedInput = new();
+
+        transformStates.TryGetByTick(reconciliationTick, out clientProcessedState);
+        inputStates.TryGetByTick(reconciliationTick, out clientProcessedInput);
+
+        if (clientProcessedState.position.DistanceTo(currentReconciliationState.position) > 0.01)
         {
-            newInput = true;
+            Position = currentReconciliationState.position;
+            Velocity = currentReconciliationState.velocity;
+
+            GD.Print("we have to reconciliate, position is different as f");
+            GD.Print("Client was ", clientProcessedState.position);
+            GD.Print("Client isOnFloor ", clientProcessedState.isOnFloor);
+            GD.Print("Server was ", currentReconciliationState.position);
+            GD.Print("Server isOnFloor ", currentReconciliationState.isOnFloor);
+
+            SaveTick(reconciliationTick, currentReconciliationState.tickState.tickTimestamp, clientProcessedInput, currentReconciliationState.isOnFloor);
+
+            reconciliationTick += 1;
+
+            while (reconciliationTick < currentTick)
+            {
+                ReconciliationClientTick(tickDelta, reconciliationTick, currentReconciliationState.tickState.tickTimestamp);
+
+                reconciliationTick += 1;
+            }
+        }
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
+    public void ReceiveServerReconciliationState(Dictionary transformDictionary, int clientTick)
+    {
+        currentReconciliationState = TransformState.FromDictionary(transformDictionary);
+        currentReconciliationState.tickState.tick = clientTick;
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void ReceiveFirstData(long peerOwner)
+    {
+        playerOwner = startup.combatPlayers[peerOwner];
+        initialized = true;
+    }
+
+    // Server Methods //
+
+    public int? ProcessClientOldInputs(float delta, int processTick, ulong timeStamp)
+    {
+        int inputsDifference = clientInputs.Count - maxClientInputsAllowed;
+
+        if (inputsDifference > 0) //means player hacked somehow and sent a lot of inputs, lets clear 
+        {
+            for (int i = 0; i <= inputsDifference; i++)
+            {
+                clientInputs.Dequeue();
+            }
+
+            GD.Print("removed ", inputsDifference);
         }
 
-        lastInputState = newInputState;
+        if (clientInputs.Count > 0)
+        {
+            InputState inputState = clientInputs.Dequeue();
+            int clientTick = inputState.tickState.tick;
 
-        return newInput;
+            if (clientTick < lastProcessedInput.tickState.tick)
+            {
+                GD.Print("Cant, wrong input order, probaly packte loss");
+                return null;
+            }
+
+            lastProcessedInput.tickState.tick = clientTick;
+
+            int tickDelay = playerOwner.pingPong.ClientStats.BufferTicks(playerOwner.pingPong.ClientSendRate, playerOwner.pingPong.TickIntervalMs);
+            int serverTick = clientTick + tickDelay;
+            int sendServerTick = serverTick;
+
+            inputState.tickState.tick = serverTick;
+            inputState.tickState.tickTimestamp = timeStamp;
+
+            inputStates.Push(serverTick, inputState);
+
+            if (serverTick == processTick)
+            {
+                GD.Print("same input");
+                return clientTick;
+            }
+
+            TransformState transformStateInputed = new();
+            transformStates.TryGetByTick(serverTick - 1, out transformStateInputed);
+
+            Position = transformStateInputed.position;
+            Velocity = transformStateInputed.velocity;
+
+            while (serverTick < processTick)
+            {
+                TransformState transformStateRollback = new();
+                transformStates.TryGetByTick(serverTick, out transformStateRollback);
+
+                TickServerRollback(tickDelta, serverTick, transformStateRollback.tickState.tickTimestamp);
+                serverTick += 1;
+            }
+
+            TransformState reconciliationState = new();
+            transformStates.TryGetByTick(sendServerTick, out reconciliationState);
+
+            RpcId(playerOwner.peerOwner, nameof(ReceiveServerReconciliationState), reconciliationState.ToDictionary(), clientTick);
+
+            return null;
+        }
+        else
+        {
+            InputState inputState = new(Vector2I.Zero, Vector2I.Zero, false, new TickState(processTick, timeStamp));
+
+            inputStates.Push(processTick, inputState);
+        }
+
+        return null;
     }
 
-    public void SpawnReconciliation(TransformState spawnTransformState)
+    public void TickServerRollback(float delta, int processTick, ulong timeStamp)
     {
-        ulong serverTime = playerOwner.serverTimer.GetServerTime();
-        time = serverTime - spawnTransformState.tickState.tickTimestamp;
-
-        Position = spawnTransformState.position;
-        Velocity = spawnTransformState.velocity;
-
-        lastInputState = new InputState(Vector2I.Zero, Vector2I.Zero, false, new TickState(currentTick, spawnTransformState.tickState.tickTimestamp));
-
-        SaveTick(currentTick, spawnTransformState.tickState.tickTimestamp);
-
-        lastTime = serverTime;
-        initialized = true;
-
-        currentTick += 1;
+        InputState inputState = new();
+        inputStates.TryGetByTick(processTick, out inputState);
+        ProcessInputState(inputState,processTick-1);
+        SimulateGravity(delta,-1);
+        MoveAndSlide();
+        SaveTick(processTick, timeStamp, inputState, IsOnFloorDeterministic(-1));
     }
 
-    //Shared Methods//
-    public void ProcessInputState(InputState input)
+    public void TickServer(float delta, int processTick, ulong timeStamp)
     {
+        int? clientSendTick = ProcessClientOldInputs(delta, processTick, timeStamp);
+        InputState inputState = new();
+        inputStates.TryGetByTick(processTick, out inputState);
+        ProcessInputState(inputState,processTick-1);
+        SimulateGravity(delta,processTick-1);
+        MoveAndSlide();
+        SaveTick(processTick, timeStamp, inputState, IsOnFloorDeterministic(-1));
+
+        if (clientSendTick != null)
+        {
+            TransformState reconciliationState = new();
+            transformStates.TryGetByTick(processTick, out reconciliationState);
+
+            RpcId(playerOwner.peerOwner, nameof(ReceiveServerReconciliationState), reconciliationState.ToDictionary(), (int)clientSendTick);
+        }
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
+    public void ReceiveClientInput(Dictionary inputDictionary)
+    {
+        clientInputs.Enqueue(InputState.FromDictionary(inputDictionary));
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void ClientRequestedFirstData()
+    {
+        RpcId(Multiplayer.GetRemoteSenderId(), nameof(ReceiveFirstData), playerOwner.peerOwner);
+    }
+
+    // Shared Methods //
+
+    public bool IsOnFloorDeterministic(int processTick)
+    {
+        if (processTick == -1)
+        {
+            return IsOnFloor();
+        }else
+        {
+            TransformState processTransformState = new();
+            bool hasState = transformStates.TryGetByTick(processTick, out processTransformState);
+
+            if (hasState)
+            {
+                return processTransformState.isOnFloor;
+            }
+
+            return IsOnFloor();
+        }
+    }
+
+    public void SimulateGravity(float delta,int processTick)
+    {
+        bool isOnFloor = false;
+
+        if (processTick == -1)
+        {
+            isOnFloor = IsOnFloorDeterministic(-1);
+
+            if (Multiplayer.IsServer())
+            {
+                //GD.Print("Server floor ", isOnFloor);
+                //GD.Print("Server position ", Position);
+            }
+        }
+        else
+        {
+            TransformState oldProcessTransformState = new();
+            transformStates.TryGetByTick(processTick, out oldProcessTransformState);
+
+            isOnFloor = oldProcessTransformState.isOnFloor;
+        }
+
+        if (isOnFloor) return;
+
+        Vector3 currentVelocity = Velocity;
+
+        currentVelocity += new Vector3(currentVelocity.X, -gravity * delta, currentVelocity.Z);
+
+        Velocity = currentVelocity;
+    }
+
+    public void SaveTick(int processTick,ulong timeStamp,InputState inputState,bool isOnFloor)
+    {
+        transformStates.Push(processTick, new TransformState(Velocity, Position, new TickState(processTick, timeStamp), isOnFloor));
+        inputStates.Push(processTick, inputState);
+    }
+
+    public void ProcessInputState(InputState input, int processTick)
+    {
+        TransformState oldProcessTransformState = new();
+        transformStates.TryGetByTick(processTick, out oldProcessTransformState);
+
         Vector2I inputDirection = input.inputDirection;
         Vector2I inputDirectionFraction = input.inputDirectionFraction;
 
         Vector2 moveDirection = VectorDeterministicedToFloatVector(inputDirection, inputDirectionFraction);
         Vector3 currentVelocity = Velocity;
 
-        Velocity = new Vector3(moveDirection.X, currentVelocity.Y, moveDirection.Y);
-    }
+        bool isOnFloor = oldProcessTransformState.isOnFloor;
 
-    public void TickGravity(float delta)
-    {
-        if (IsOnFloor()) return;
-
-        Velocity += new Vector3(0, -gravity * delta, 0);
-    }
-
-    public void SaveTick(int currentTick, ulong currentTime)
-    {
-        transformStates.Push(currentTick, new TransformState(Velocity, Position, new TickState(currentTick, currentTime)));
-        inputStates.Push(currentTick, lastInputState);
-
-        if (!floored && IsOnFloor())
+        if (!Multiplayer.IsServer() && input.jumped)
         {
-            floored = true;
-
-            if (Multiplayer.IsServer())
-            {
-                //GD.Print("--PrintServer--");
-                //transformStates.PrintAll();
-            }
-            else
-            {
-                //GD.Print("--PrintClient--");
-                //transformStates.PrintAll();
-            }
+            //GD.Print(isOnFloor);
         }
+
+        float y = input.jumped && isOnFloor ? currentVelocity.Y + (jumpPower * tickDelta) : currentVelocity.Y;
+
+        Velocity = new Vector3(moveDirection.X, y, moveDirection.Y);
     }
 
     public Array<Vector2I> GetDirectionVectorsDeterministiced(Vector2 vector)
@@ -335,7 +430,7 @@ public partial class Character : CharacterBody3D
 
         return [integerVector, decimalVector];
     }
-    
+
     public Vector2 VectorDeterministicedToFloatVector(Vector2I intVector, Vector2I decimalVector)
     {
         float x = (float)(intVector.X + (decimalVector.X / Math.Pow(10, 3)));

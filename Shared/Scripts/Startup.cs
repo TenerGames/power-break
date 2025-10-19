@@ -5,7 +5,6 @@ using System.Linq;
 
 public partial class Startup : Node3D
 {
-
     [Export] public Dictionary<long, CombatPlayer> combatPlayers;
     
     public override void _Ready()

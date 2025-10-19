@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://th7ivxs2nesn"]
+
+[ext_resource type="Script" uid="uid://cuqwhcaj72ynn" path="res://Shared/Scripts/PingPong.cs" id="1_wolk8"]
+
+[node name="Ping" type="Node"]
+script = ExtResource("1_wolk8")

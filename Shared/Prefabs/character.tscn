@@ -1,13 +1,14 @@
 [gd_scene load_steps=4 format=3 uid="uid://015yfa8q136h"]
 
-[ext_resource type="Script" uid="uid://bxqhbg13rgab3" path="res://Shared/Scripts/Character.cs" id="1_8idse"]
+[ext_resource type="Script" uid="uid://txv0w8rcjfvw" path="res://Shared/Scripts/Character.cs" id="1_8idse"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_k6ade"]
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_e0xgo"]
 
-[node name="Character" type="CharacterBody3D"]
+[node name="Character" type="CharacterBody3D" node_paths=PackedStringArray("collisionShape3D")]
 script = ExtResource("1_8idse")
+collisionShape3D = NodePath("CollisionShape3D")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("CapsuleShape3D_k6ade")

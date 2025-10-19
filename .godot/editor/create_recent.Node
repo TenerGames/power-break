@@ -1,8 +1,8 @@
+Node
+MultiplayerSpawner
 MeshInstance3D
 CollisionShape3D
 CharacterBody3D
-MultiplayerSpawner
-Node
 MultiplayerSynchronizer
 Node3D
 DirectionalLight3D
