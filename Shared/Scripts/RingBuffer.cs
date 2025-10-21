@@ -12,6 +12,8 @@ public class RingBuffer<T>
     public int Capacity { get; }
     public int Count => _count;
 
+    private static T _nullValue = default!;
+
     public RingBuffer(int capacity)
     {
         if (capacity <= 0)
@@ -52,20 +54,18 @@ public class RingBuffer<T>
         }
     }
 
-    public bool TryGetByTick(int tick, out T value)
+    public ref T TryGetByTick(int tick)
     {
         for (int i = 0; i < _count; i++)
         {
             int index = (_start + i) % Capacity;
             if (_ticks[index] == tick)
             {
-                value = _values[index];
-                return true;
+                return ref _values[index];
             }
         }
 
-        value = default!;
-        return false;
+        return ref _nullValue;
     }
 
     public int GetLatestTick()

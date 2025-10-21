@@ -1,21 +1,28 @@
-.gradle
-**/build/
-!src/**/build/
+# Godot specific files
+.godot/
+.import/
+export.cfg
+export_presets.cfg
+*.translation
+.mono/
+data_/
+mono_crash.*.json
 
-# Ignore Gradle GUI config
-gradle-app.setting
+# Exported builds (optional, if you don't want to track builds in Git)
+*.pck
+*.zip
+*.exe
+*.app
+*.apk
+*.ipa
+*.wasm
+*.html
+*.js
+builds/
+export/
 
-# Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
-!gradle-wrapper.jar
-
-# Avoid ignore Gradle wrappper properties
-!gradle-wrapper.properties
-
-# Cache of project
-.gradletasknamecache
-
-# Eclipse Gradle plugin generated files
-# Eclipse Core
-.project
-# JDT-specific (Eclipse Java Development Tools)
-.classpath
+# Temporary files and logs
+temp/
+*.log
+*.tmp
+*~

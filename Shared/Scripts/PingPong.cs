@@ -7,8 +7,8 @@ public partial class PingPong : Node
     [Export] public double PingInterval = 1.0;
     [Export] public float Smoothing = 0.2f;
     [Export] public int MaxSamples = 20;
-    [Export] public float ClientSendRate = 60f;
-    [Export] public float TickIntervalMs = 16.666f;
+    [Export] public float ClientSendRate = Engine.PhysicsTicksPerSecond;
+    [Export] public float TickIntervalMs = 1000f / Engine.PhysicsTicksPerSecond;
 
     private ClientStats clientStats;
     public long peerOwner = -1;
@@ -96,13 +96,12 @@ public partial class PingPong : Node
         clientStats.JitterMs = Math.Clamp(CalculateJitter(clientStats.RecentRtts), 0, 500);
         clientStats.LossRate = Math.Clamp(1.0 - (clientStats.ReceivedCount / (double)clientStats.SentCount), 0, 1);
 
-        /*
         GD.Print($"[Ping] Peer {sender} | RTT: {clientStats.SmoothedRttMs:F1}ms | " +
                  $"OneWay: {clientStats.OneWayMs:F1}ms | Jitter: {clientStats.JitterMs:F1}ms | " +
                  $"Loss: {clientStats.LossRate * 100:F1}% | " +
                  $"Buffer: {clientStats.BufferMs(ClientSendRate):F1}ms " +
                  $"({clientStats.BufferTicks(ClientSendRate, TickIntervalMs)} ticks)");
-                 */
+                 
     }
 
     private double CalculateJitter(List<double> samples)
@@ -143,4 +142,7 @@ public class ClientStats
 
     public int BufferTicks(double sendRate, double tickMs) =>
         Mathf.RoundToInt((float)(BufferMs(sendRate) / tickMs));
+
+    public int BufferTicks(double sendRate, double tickMs, int minimunBuffer) =>
+        Math.Max(Mathf.RoundToInt((float)(BufferMs(sendRate) / tickMs)), minimunBuffer);
 }

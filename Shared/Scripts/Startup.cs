@@ -6,9 +6,13 @@ using System.Linq;
 public partial class Startup : Node3D
 {
     [Export] public Dictionary<long, CombatPlayer> combatPlayers;
+    public const int CharacterStartDataChannel = 1;
+    public const int CharactersInputsChannel = 2;
+    public const int CharactersReconciliationChannel = 3;
     
     public override void _Ready()
     {
+
         combatPlayers = [];
         
         string[] args = OS.GetCmdlineArgs();
