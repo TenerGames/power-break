@@ -29,6 +29,7 @@ public partial class Character : CharacterBody3D
     // Client Vars //
     public TransformState? lastServerReconciliationState = default;
     public TransformState lastProcessedReconciliationState = default;
+    public bool initilized = false;
 
     // Server Vars //
     public int? tickOffset = null;
@@ -50,7 +51,12 @@ public partial class Character : CharacterBody3D
         startup = GetNode<Startup>("/root/Main");
         tickDelta = 1.0f / Engine.PhysicsTicksPerSecond;
 
-        Position = new Vector3(0, 1.5f, 0);
+        Position = new Vector3(0, 1.0f, 0);
+
+        if (Multiplayer.IsServer())
+        {
+            initilized = true;
+        }
 
         SaveTick(currentTick, new InputState(default, default, false, new TickState(currentTick, currentTime)), currentTime);
         SetPhysicsProcess(true);
@@ -78,6 +84,12 @@ public partial class Character : CharacterBody3D
         ulong currentTime = Time.GetTicksMsec();
 
         currentTick += 1;
+
+        if (!initilized)
+        {
+            SaveTick(currentTick, new InputState(default, default, false, new TickState(currentTick, currentTime)), currentTime);
+            return;
+        }
 
         switch (characterSimulationType)
         {
@@ -271,6 +283,8 @@ public partial class Character : CharacterBody3D
         {
             characterSimulationType = CharacterSimulationTypes.Client;
         }
+
+        initilized = true;
     }
 
     //Those rcps are to deal with inputs

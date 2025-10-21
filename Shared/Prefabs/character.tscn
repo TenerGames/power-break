@@ -1,17 +1,29 @@
-[gd_scene load_steps=4 format=3 uid="uid://015yfa8q136h"]
+[gd_scene load_steps=6 format=3 uid="uid://015yfa8q136h"]
 
 [ext_resource type="Script" uid="uid://txv0w8rcjfvw" path="res://Shared/Scripts/Character.cs" id="1_8idse"]
+[ext_resource type="PackedScene" uid="uid://x3g1l0hybb4s" path="res://Shared/Prefabs/Characters/Default.tscn" id="2_0oimd"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_k6ade"]
+radius = 0.33
+height = 1.85
 
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_e0xgo"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0oimd"]
+transparency = 1
+albedo_color = Color(1, 1, 1, 0.18039216)
 
-[node name="Character" type="CharacterBody3D" node_paths=PackedStringArray("collisionShape3D")]
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_0oimd"]
+material = SubResource("StandardMaterial3D_0oimd")
+radius = 0.33
+height = 1.85
+
+[node name="Character" type="CharacterBody3D"]
 script = ExtResource("1_8idse")
-collisionShape3D = NodePath("CollisionShape3D")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 shape = SubResource("CapsuleShape3D_k6ade")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-mesh = SubResource("CapsuleMesh_e0xgo")
+mesh = SubResource("CapsuleMesh_0oimd")
+
+[node name="MeshBody" parent="." instance=ExtResource("2_0oimd")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.8898267, 0)

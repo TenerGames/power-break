@@ -1,6 +1,6 @@
+MeshInstance3D
 Node
 MultiplayerSpawner
-MeshInstance3D
 CollisionShape3D
 CharacterBody3D
 MultiplayerSynchronizer
