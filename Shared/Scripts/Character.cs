@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 using Godot.Collections;
@@ -194,9 +195,9 @@ public partial class Character : CharacterBody3D
     {
         int currentTickOffset = playerOwner.pingPong.ClientStats.BufferTicks(playerOwner.pingPong.ClientSendRate, playerOwner.pingPong.TickIntervalMs, minimunTickOffset);
 
-        if (tickOffset == null || currentTickOffset > tickOffset)
+        if (tickOffset == null || currentTickOffset != tickOffset)
         {
-            tickOffset = currentTickOffset;
+            tickOffset = Math.Min(currentTickOffset, minimunTickOffset);
         }
 
         if (inputsQueue.Count > 0)
