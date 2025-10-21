@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PowerBreak")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+99b7cdb2d4fb70c3ae8aeb175665685641a9d225")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+63afaf2deaf1765aaedbf05453d6abf10681b576")]
 [assembly: System.Reflection.AssemblyProductAttribute("PowerBreak")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PowerBreak")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

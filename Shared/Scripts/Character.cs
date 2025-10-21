@@ -51,7 +51,7 @@ public partial class Character : CharacterBody3D
         startup = GetNode<Startup>("/root/Main");
         tickDelta = 1.0f / Engine.PhysicsTicksPerSecond;
 
-        Position = new Vector3(0, 1.0f, 0);
+        Position = new Vector3(0, 1.425f, 0);
 
         if (Multiplayer.IsServer())
         {
@@ -69,7 +69,7 @@ public partial class Character : CharacterBody3D
         if (Multiplayer.IsServer())
         {
             characterSimulationType = CharacterSimulationTypes.Server;
-            SetMultiplayerAuthority((int)playerOwner.peerOwner);
+            SetMultiplayerAuthority((int)playerOwner.peerOwner, true);
         }
         else
         {
@@ -274,6 +274,8 @@ public partial class Character : CharacterBody3D
     public void ReceiveCharacterStartData(long peerOwner)
     {
         playerOwner = startup.combatPlayers[peerOwner];
+
+        SetMultiplayerAuthority((int)peerOwner, true);
 
         if (peerOwner == Multiplayer.GetUniqueId())
         {
