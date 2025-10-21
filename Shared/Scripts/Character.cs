@@ -159,7 +159,7 @@ public partial class Character : CharacterBody3D
 
             reconcilationTick += 1;
 
-            while (reconcilationTick < processTick)
+            while (reconcilationTick <= processTick)
             {
                 TickClientOwnerReconciliation(tickDelta, reconcilationTick);
 
