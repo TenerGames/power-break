@@ -1,5 +1,5 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1761067602
+::res://::1761132885
 icon.svg::CompressedTexture2D::3661938247819628134::1760536694::1760536710::1::::<><><>0<>0<>17efe407a2044a8af03d21990a51fdf2<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
 README.md::TextFile::-1::1760725931::0::1::::<><><>0<>0<><>::
 ::res://addons/::1761067589
@@ -25,7 +25,7 @@ Default.tscn::PackedScene::1672557330113668120::1761063537::0::1::::<><><>0<>0<>
 ::res://Shared/Scenes/::1760707825
 Main_Scene.tscn::PackedScene::3859905672236908351::1760707825::0::1::::<><><>0<>0<><>::uid://wsmp2s6poou3::::res://Shared/Scripts/Startup.cs
 ::res://Shared/Scripts/::1761063176
-Character.cs::CSharpScript::1382389626429392316::1761064738::0::1::::<>CharacterBody3D<><>0<>0<><>::
+Character.cs::CSharpScript::1382389626429392316::1761083330::0::1::::<>CharacterBody3D<><>0<>0<><>::
 CombatPlayer.cs::CSharpScript::6728300802358431494::1760879404::0::1::::<>Node<><>0<>0<><>::
 MathUtils.cs::CSharpScript::5446050117030279740::1761051068::0::1::::<><><>0<>0<><>::
 MovementSimulation.cs::CSharpScript::2856501101394297576::1761053525::0::1::::<><><>0<>0<><>::

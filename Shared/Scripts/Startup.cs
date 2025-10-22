@@ -9,12 +9,13 @@ public partial class Startup : Node3D
     public const int CharacterStartDataChannel = 1;
     public const int CharactersInputsChannel = 2;
     public const int CharactersReconciliationChannel = 3;
-    
+    public static float GRAVITY = 20.0f;
+
     public override void _Ready()
     {
 
         combatPlayers = [];
-        
+
         string[] args = OS.GetCmdlineArgs();
 
         if (args.Contains("--role"))
@@ -25,7 +26,7 @@ public partial class Startup : Node3D
             {
                 string role = args[index + 1];
 
-                PackedScene scene = (PackedScene)GD.Load("res://"+role+"/Scenes/Combat_Test.tscn");
+                PackedScene scene = (PackedScene)GD.Load("res://" + role + "/Scenes/Combat_Test.tscn");
                 var sceneInstance = scene.Instantiate();
                 AddChild(sceneInstance);
             }
@@ -35,4 +36,11 @@ public partial class Startup : Node3D
             GD.Print("Nenhum argumento --role foi passado.");
         }
     }
+}
+
+public enum SimulationTypes{
+    None,
+    ClientOwner,
+    Server,
+    Client,
 }

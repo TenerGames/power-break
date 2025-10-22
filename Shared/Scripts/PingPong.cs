@@ -96,11 +96,13 @@ public partial class PingPong : Node
         clientStats.JitterMs = Math.Clamp(CalculateJitter(clientStats.RecentRtts), 0, 500);
         clientStats.LossRate = Math.Clamp(1.0 - (clientStats.ReceivedCount / (double)clientStats.SentCount), 0, 1);
 
+/*
         GD.Print($"[Ping] Peer {sender} | RTT: {clientStats.SmoothedRttMs:F1}ms | " +
                  $"OneWay: {clientStats.OneWayMs:F1}ms | Jitter: {clientStats.JitterMs:F1}ms | " +
                  $"Loss: {clientStats.LossRate * 100:F1}% | " +
                  $"Buffer: {clientStats.BufferMs(ClientSendRate):F1}ms " +
                  $"({clientStats.BufferTicks(ClientSendRate, TickIntervalMs)} ticks)");
+                 */
                  
     }
 

@@ -4,7 +4,7 @@ using System;
 
 public class MovementSimulation
 {
-    public static InputState GetMovementInput(ulong timeStamp, int processTick, float speed)
+    public static InputState GetMovementInput(ulong timeStamp, int processTick)
     {
         Vector2 inputDirectionFloat = Vector2.Zero;
         bool jumped = false;
@@ -20,21 +20,21 @@ public class MovementSimulation
         if (Input.IsActionPressed("jump"))
             jumped = true;
 
-        inputDirectionFloat = inputDirectionFloat.Normalized() * speed;
+        inputDirectionFloat = inputDirectionFloat.Normalized();
 
         Array<Vector2I> vectorsDeterministiced = MathUtils.GetDirectionVectorsDeterministiced(ref inputDirectionFloat);
         return new InputState(vectorsDeterministiced[0], vectorsDeterministiced[1], jumped, new TickState(processTick, timeStamp));
     }
     
-    public static void SimulateInputMovement(ref InputState input, ref CharacterBody3D characterBody3D, float jumpPower)
+    public static void SimulateInputMovement(ref InputState input, ref CharacterBody3D characterBody3D, ref CharacterAttributesState characterAttributesState)
     {
         Vector2I inputDirection = input.inputDirection;
         Vector2I inputDirectionFraction = input.inputDirectionFraction;
 
-        Vector2 moveDirection = MathUtils.VectorDeterministicedToFloatVector(ref inputDirection, ref inputDirectionFraction);
+        Vector2 moveDirection = MathUtils.VectorDeterministicedToFloatVector(ref inputDirection, ref inputDirectionFraction) * characterAttributesState.moveSpeed;
         Vector3 currentVelocity = characterBody3D.Velocity;
 
-        float y = input.jumped && characterBody3D.IsOnFloor() ? currentVelocity.Y + jumpPower : currentVelocity.Y;
+        float y = input.jumped && characterBody3D.IsOnFloor() ? currentVelocity.Y + characterAttributesState.jumpPower : currentVelocity.Y;
 
         characterBody3D.Velocity = new Vector3(moveDirection.X, y, moveDirection.Y);
     }
@@ -46,17 +46,22 @@ public class MovementSimulation
         characterBody3D.Velocity -= new Vector3(0, gravity * delta, 0);
     }
 
-    public static TransformState GenerateTransformState(ref CharacterBody3D characterBody3, int processTick, ulong timeStamp)
+    public static CharacterAttributesState GetCharacterAttributes(Character character)
     {
-        return new TransformState(characterBody3.Velocity, characterBody3.Position, new TickState(processTick, timeStamp));
+        return new CharacterAttributesState(character.moveSpeed, character.jumpPower);
     }
 
-    public static void SimulateCharacterFrame(Character character, ref InputState input, int processTick, float delta)
+    public static TransformState GenerateTransformState(ref CharacterBody3D characterBody3, int processTick, ulong timeStamp, CharacterAttributesState characterAttributesState)
+    {
+        return new TransformState(characterBody3.Velocity, characterBody3.Position, new TickState(processTick, timeStamp), characterAttributesState);
+    }
+
+    public static void SimulateCharacterFrame(Character character, ref InputState input, int processTick, float delta, ref CharacterAttributesState characterAttributesState)
     {
         CharacterBody3D characterBody3D = character;
 
-        SimulateInputMovement(ref input, ref characterBody3D, character.jumpPower);
-        SimulateGravity(ref characterBody3D, character.gravity, delta);
+        SimulateInputMovement(ref input, ref characterBody3D, ref characterAttributesState);
+        SimulateGravity(ref characterBody3D, character.GetCharacterGravity(), delta);
         character.MoveAndSlide();
     }
 }

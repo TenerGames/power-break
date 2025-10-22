@@ -56,4 +56,9 @@ public struct InputState(Vector2I inputDirection, Vector2I inputDirectionFractio
     {
         return !left.Equals(right);
     }
+
+    public override string ToString()
+    {
+        return $"Direciton: {inputDirection}, Direction Fraction: {inputDirectionFraction}, Jumped: {jumped}";
+    }
 }

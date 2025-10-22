@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using Godot.Collections;
 
@@ -12,29 +13,34 @@ public partial class Character : CharacterBody3D
     CharacterBody3D characterBody3D;
     float tickDelta;
     public float moveSpeed = 10.0f;
-    public float gravity = 20.0f;
     public float jumpPower = 10.0f;
     public int currentTick = 0;
     public int minimunTickOffset = 50;
-    public enum CharacterSimulationTypes
-    {
-        None,
-        ClientOwner,
-        Server,
-        Client,
-    }
-    public CharacterSimulationTypes characterSimulationType;
+    public SimulationTypes characterSimulationType;
     public Queue<InputState> inputsQueue;
 
     // Client Vars //
     public TransformState? lastServerReconciliationState = default;
     public TransformState lastProcessedReconciliationState = default;
+    public Godot.Collections.Dictionary<int,bool> inputsToConfirm;
+    public Array<int> inputsConfirmed;
     public bool initilized = false;
+    public int maxInputsToConfirm = 250;
+    public int lastInputStartToRemove = 0;
+    int lastInputConfirmed = -1;
 
     // Server Vars //
     public int? tickOffset = null;
     public int lastClientTickProcessed = -1;
     public TransformState? lastClientUpdateTransformState = null;
+    public System.Collections.Generic.Dictionary<int, InputState> clientInputsToSimulate;
+    public int clientCurrentInputToSimulate = -1;
+    public int ignoreOne = 0;
+
+    public RingBuffer<TransformState> TransformStates
+    {
+        get { return transformStates; }
+    }
 
     public override void _Ready()
     {
@@ -45,6 +51,10 @@ public partial class Character : CharacterBody3D
         characterBody3D = this;
 
         inputsQueue = new Queue<InputState>();
+
+        inputsConfirmed = [];
+        inputsToConfirm = [];
+        clientInputsToSimulate = [];
         transformStates = new RingBuffer<TransformState>(1000);
         inputStates = new RingBuffer<InputState>(1000);
 
@@ -58,7 +68,7 @@ public partial class Character : CharacterBody3D
             initilized = true;
         }
 
-        SaveTick(currentTick, new InputState(default, default, false, new TickState(currentTick, currentTime)), currentTime);
+        SaveTick(currentTick, new InputState(default, default, false, new TickState(currentTick, currentTime)), currentTime, MovementSimulation.GetCharacterAttributes(this));
         SetPhysicsProcess(true);
     }
 
@@ -68,7 +78,7 @@ public partial class Character : CharacterBody3D
 
         if (Multiplayer.IsServer())
         {
-            characterSimulationType = CharacterSimulationTypes.Server;
+            characterSimulationType = SimulationTypes.Server;
             SetMultiplayerAuthority((int)playerOwner.peerOwner, true);
         }
         else
@@ -87,22 +97,22 @@ public partial class Character : CharacterBody3D
 
         if (!initilized)
         {
-            SaveTick(currentTick, new InputState(default, default, false, new TickState(currentTick, currentTime)), currentTime);
+            SaveTick(currentTick, new InputState(default, default, false, new TickState(currentTick, currentTime)), currentTime, MovementSimulation.GetCharacterAttributes(this));
             return;
         }
 
         switch (characterSimulationType)
         {
-            case CharacterSimulationTypes.None:
+            case SimulationTypes.None:
 
                 GD.Print("Character doenst have authority setted yet");
                 break;
 
-            case CharacterSimulationTypes.Server:
+            case SimulationTypes.Server:
                 TickServer(tickDelta, currentTick, currentTime);
                 break;
 
-            case CharacterSimulationTypes.ClientOwner:
+            case SimulationTypes.ClientOwner:
                 TickClientOwner(tickDelta, currentTick, currentTime);
                 break;
 
@@ -117,24 +127,40 @@ public partial class Character : CharacterBody3D
 
         switch (characterSimulationType)
         {
-            case CharacterSimulationTypes.None:
+            case SimulationTypes.None:
                 GD.Print("Character doenst have authority setted yet");
                 break;
 
-            case CharacterSimulationTypes.Server:
+            case SimulationTypes.Server:
 
                 if (lastClientUpdateTransformState != null)
                 {
                     RpcId(playerOwner.peerOwner, nameof(ReceiveServerReconcilationState), ((TransformState)lastClientUpdateTransformState).ToDictionary());
                 }
 
+                if (clientInputsToSimulate.Count > 250)
+                {
+                    int difference = clientInputsToSimulate.Count - 250;
+
+                    GD.Print(clientInputsToSimulate.Count);
+
+                    for (int i = 0; i < difference; i++)
+                    {
+                        clientInputsToSimulate.Remove(clientCurrentInputToSimulate);
+                        clientCurrentInputToSimulate += 1;
+                    }
+                }
+
                 break;
 
-            case CharacterSimulationTypes.ClientOwner:
+            case SimulationTypes.ClientOwner:
                 while (inputsQueue.Count > 0)
                 {
                     RpcId(1, nameof(SendCharacterOwnerInputs), inputsQueue.Dequeue().ToDictionary());
                 }
+
+                ReconstituteInputs();
+
                 break;
 
             default:
@@ -143,6 +169,50 @@ public partial class Character : CharacterBody3D
     }
 
     // Client Methods //
+    public void ReconstituteInputs()
+    {
+        if (inputsToConfirm.Count == 0 || inputsConfirmed.Count == 0)
+            return;
+
+        Array<int> ticksNotConfirmed = [];
+        Array<int> ticksConfirmed = [];
+
+        for (int i = 0; i < inputsConfirmed.Count; i++)
+        {
+            int tick = inputsConfirmed[i];
+
+            if (inputsToConfirm.TryGetValue(tick, out bool confirmedValue))
+            {
+                int expectedToConfirm = lastInputConfirmed + 1;
+
+                if (tick > expectedToConfirm && lastInputConfirmed > -1)
+                {
+                    for (int tickUnconfirmed = expectedToConfirm; tickUnconfirmed < tick; tickUnconfirmed++)
+                    {
+                        inputsToConfirm.Remove(tickUnconfirmed);
+                        ticksNotConfirmed.Add(tickUnconfirmed);
+                    }
+                }
+
+                lastInputConfirmed = tick;
+                inputsToConfirm.Remove(tick);
+            }
+
+            ticksConfirmed.Add(i);
+        }
+
+        for (int i = ticksConfirmed.Count - 1; i >= 0; i--)
+        {
+            int index = ticksConfirmed[i];
+
+            inputsConfirmed.RemoveAt(index);
+        }
+
+        foreach(int tick in ticksNotConfirmed)
+        {
+            RpcId(1, nameof(SendCharacterOwnerReconstitutedInputs), inputStates.TryGetByTick(tick).ToDictionary());
+        }
+    }
 
     public void DoReconciliation(int processTick)
     {
@@ -160,14 +230,18 @@ public partial class Character : CharacterBody3D
 
         if (distanceFromServer >= 0.01f)
         {
-            GD.Print("Distance from server position is ", distanceFromServer);
+            GD.Print("Distance from server position is ", distanceFromServer, " so lets reconcilate");
 
             Position = lastServerReconciliationState.position;
             Velocity = lastServerReconciliationState.velocity;
 
             InputState input = inputStates.TryGetByTick(reconcilationTick);
+            TransformState oldState = transformStates.TryGetByTick(reconcilationTick);
 
-            SaveTick(reconcilationTick, input, reconcilationState.tickState.tickTimestamp);
+            oldState.characterAttributesState.moveSpeed = lastServerReconciliationState.characterAttributesState.moveSpeed;
+            oldState.characterAttributesState.jumpPower = lastServerReconciliationState.characterAttributesState.jumpPower;
+
+            SaveTick(reconcilationTick, input, reconcilationState.tickState.tickTimestamp, oldState.characterAttributesState);
 
             reconcilationTick += 1;
 
@@ -185,19 +259,34 @@ public partial class Character : CharacterBody3D
         InputState input = inputStates.TryGetByTick(processTick);
         TransformState transformState = transformStates.TryGetByTick(processTick);
 
-        MovementSimulation.SimulateCharacterFrame(this, ref input, processTick, delta);
+        MovementSimulation.SimulateCharacterFrame(this, ref input, processTick, delta, ref transformState.characterAttributesState);
 
-        SaveTick(processTick, input, transformState.tickState.tickTimestamp);
+        SaveTick(processTick, input, transformState.tickState.tickTimestamp, transformState.characterAttributesState);
     }
 
     public void TickClientOwner(float delta, int processTick, ulong timeStamp)
     {
-        InputState input = MovementSimulation.GetMovementInput(timeStamp, processTick, moveSpeed);
-        MovementSimulation.SimulateCharacterFrame(this, ref input, processTick, delta);
+        InputState input = MovementSimulation.GetMovementInput(timeStamp, processTick);
+        CharacterAttributesState characterAttributesState = MovementSimulation.GetCharacterAttributes(this);
+
+        MovementSimulation.SimulateCharacterFrame(this, ref input, processTick, delta, ref characterAttributesState);
 
         inputsQueue.Enqueue(input);
+        inputsToConfirm.Add(processTick, false);
 
-        SaveTick(processTick, input, timeStamp);
+        if (inputsToConfirm.Count > maxInputsToConfirm)
+        {
+            int difference = inputsToConfirm.Count - maxInputsToConfirm;
+            int startRemove = processTick - difference;
+
+            for (int i = 0; i < difference; i++)
+            {
+                inputsToConfirm.Remove(startRemove);
+                startRemove += 1;
+            }
+        }
+
+        SaveTick(processTick, input, timeStamp, characterAttributesState);
         DoReconciliation(processTick);
     }
 
@@ -212,18 +301,24 @@ public partial class Character : CharacterBody3D
             tickOffset = Math.Min(currentTickOffset, minimunTickOffset);
         }
 
-        if (inputsQueue.Count > 0)
+        if (clientCurrentInputToSimulate > -1 && clientInputsToSimulate.TryGetValue(clientCurrentInputToSimulate, out InputState input))
         {
-            InputState input = inputsQueue.Peek();
-
-            int clientTick = input.tickState.tick;
+            int clientTick = clientCurrentInputToSimulate;
             ulong clientTimeStamp = input.tickState.tickTimestamp;
             int serverTick = clientTick + (int)tickOffset;
             bool cantProcess = false;
 
-            if (clientTick < lastClientTickProcessed || serverTick < processTick)
+            if (!IsInputValid(ref input))
             {
-                inputsQueue.Dequeue();
+                clientInputsToSimulate.Remove(clientCurrentInputToSimulate);
+                clientCurrentInputToSimulate += 1;
+                cantProcess = true;
+            }
+
+            if (clientTick < lastClientTickProcessed || processTick > serverTick)
+            {
+                clientInputsToSimulate.Remove(clientCurrentInputToSimulate);
+                clientCurrentInputToSimulate += 1;
                 cantProcess = true;
             }
 
@@ -237,27 +332,59 @@ public partial class Character : CharacterBody3D
                 input.tickState.tick = processTick;
                 input.tickState.tickTimestamp = timeStamp;
 
-                MovementSimulation.SimulateCharacterFrame(this, ref input, processTick, delta);
-                SaveTick(processTick, input, timeStamp);
+                CharacterAttributesState characterAttributesState = MovementSimulation.GetCharacterAttributes(this);
+                MovementSimulation.SimulateCharacterFrame(this, ref input, processTick, delta, ref characterAttributesState);
 
-                lastClientUpdateTransformState = MovementSimulation.GenerateTransformState(ref characterBody3D, clientTick, clientTimeStamp);
+                SaveTick(processTick, input, timeStamp, characterAttributesState);
 
-                inputsQueue.Dequeue();
+                lastClientUpdateTransformState = MovementSimulation.GenerateTransformState(ref characterBody3D, clientTick, clientTimeStamp, characterAttributesState);
+
+                clientInputsToSimulate.Remove(clientCurrentInputToSimulate);
+                lastClientTickProcessed = clientCurrentInputToSimulate;
+                clientCurrentInputToSimulate += 1;
+                
                 return;
             }
+        }else if (clientCurrentInputToSimulate > -1) 
+        {
+            clientCurrentInputToSimulate += 1;
         }
-       
-        InputState emptyInput = new();
-        MovementSimulation.SimulateCharacterFrame(this, ref emptyInput, processTick, delta);
-             
-        SaveTick(processTick, emptyInput, timeStamp);
+
+        InputState emptyInput = default;
+
+        emptyInput.tickState.tick = processTick;
+        emptyInput.tickState.tickTimestamp = timeStamp;
+
+        CharacterAttributesState newCharacterAttributesState = MovementSimulation.GetCharacterAttributes(this);
+        MovementSimulation.SimulateCharacterFrame(this, ref emptyInput, processTick, delta, ref newCharacterAttributesState);
+
+        SaveTick(processTick, emptyInput, timeStamp, newCharacterAttributesState);
+    }
+    
+    public bool IsInputValid(ref InputState input)
+    {
+        bool valid = true;
+
+        Vector2I inputDirection = input.inputDirection;
+
+        if (inputDirection.X > 1 || inputDirection.X < -1 || inputDirection.Y > 1 || inputDirection.Y < -1)
+        {
+            valid = false;
+        } 
+
+        return valid;
     }
 
     // Shared Methods //
-    public void SaveTick(int processTick, InputState input, ulong timeStamp)
+    public void SaveTick(int processTick, InputState input, ulong timeStamp, CharacterAttributesState characterAttributesState)
     {
-        transformStates.Push(processTick, MovementSimulation.GenerateTransformState(ref characterBody3D, processTick, timeStamp));
+        transformStates.Push(processTick, MovementSimulation.GenerateTransformState(ref characterBody3D, processTick, timeStamp, characterAttributesState));
         inputStates.Push(processTick, input);
+    }
+
+    public float GetCharacterGravity()
+    {
+        return Startup.GRAVITY;
     }
 
     // RPCS //
@@ -279,22 +406,66 @@ public partial class Character : CharacterBody3D
 
         if (peerOwner == Multiplayer.GetUniqueId())
         {
-            characterSimulationType = CharacterSimulationTypes.ClientOwner;
+            characterSimulationType = SimulationTypes.ClientOwner;
         }
         else
         {
-            characterSimulationType = CharacterSimulationTypes.Client;
+            characterSimulationType = SimulationTypes.Client;
         }
 
         initilized = true;
     }
 
     //Those rcps are to deal with inputs
-    
+
     [Rpc(MultiplayerApi.RpcMode.Authority, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable, TransferChannel = Startup.CharactersInputsChannel)]
     public void SendCharacterOwnerInputs(Dictionary inputDictionary)
     {
-        inputsQueue.Enqueue(InputState.FromDictionary(inputDictionary));
+        InputState newInput = InputState.FromDictionary(inputDictionary);
+
+        if (GD.Randf() <= 0.10f)
+        {
+            //GD.Print("packte loss ", newInput.tickState.tick);
+            //return; //lets ignore the client input
+        }
+
+        ignoreOne += 1;
+
+        clientInputsToSimulate.Add(newInput.tickState.tick, newInput);
+
+        if (clientCurrentInputToSimulate == -1 || newInput.tickState.tick < clientCurrentInputToSimulate)
+        {
+            clientCurrentInputToSimulate = newInput.tickState.tick;
+        }
+
+        RpcId(playerOwner.peerOwner, nameof(ConfirmedSentInput), newInput.tickState.tick);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.Authority, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable, TransferChannel = Startup.CharactersInputsChannel)]
+    public void SendCharacterOwnerReconstitutedInputs(Dictionary inputDictionary)
+    {
+        InputState newInput = InputState.FromDictionary(inputDictionary);
+
+        if (newInput.tickState.tick < lastClientTickProcessed) return;
+
+        if (clientInputsToSimulate.TryGetValue(newInput.tickState.tick, out InputState _))
+        {
+            //GD.Print("server already have ", newInput.tickState.tick, " probaly packet loss");
+            return;
+        }
+
+        clientInputsToSimulate.Add(newInput.tickState.tick, newInput);
+
+        if (clientCurrentInputToSimulate == -1 || newInput.tickState.tick < clientCurrentInputToSimulate)
+        {
+            clientCurrentInputToSimulate = newInput.tickState.tick;
+        }
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable, TransferChannel = Startup.CharactersInputsChannel)]
+    public void ConfirmedSentInput(int inputConfirmed)
+    {
+        inputsConfirmed.Add(inputConfirmed);
     }
 
     //Those rcps are for client reconcilation
