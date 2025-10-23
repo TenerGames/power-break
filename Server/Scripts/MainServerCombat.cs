@@ -13,9 +13,9 @@ public partial class MainServerCombat : Node
     {
         base._Ready();
 
-        DisplayServer.WindowSetPosition(new Vector2I(1920 / 2, 100));
-        DisplayServer.WindowSetSize(new Vector2I(960, 540)); 
-        DisplayServer.WindowSetTitle("Server");
+        //DisplayServer.WindowSetPosition(new Vector2I(1920 / 2, 100));
+        //DisplayServer.WindowSetSize(new Vector2I(960, 540)); 
+        //DisplayServer.WindowSetTitle("Server");
 
         startup = GetNode<Startup>("/root/Main");
     }
@@ -51,6 +51,8 @@ public partial class MainServerCombat : Node
     {
         CombatPlayer combatPlayer = GD.Load<PackedScene>("res://Shared/Prefabs/combat_player.tscn").Instantiate<CombatPlayer>();
         combatPlayer.peerOwner = id;
+
+        combatPlayer.Name = "Player_" + id;
 
         playersNode.AddChild(combatPlayer);
         startup.combatPlayers.Add(id, combatPlayer);

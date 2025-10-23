@@ -15,7 +15,7 @@ public partial class Character : CharacterBody3D
     public float moveSpeed = 10.0f;
     public float jumpPower = 10.0f;
     public int currentTick = 0;
-    public int minimunTickOffset = 50;
+    public int minimunTickOffset = 10;
     public SimulationTypes characterSimulationType;
     public Queue<InputState> inputsQueue;
 
@@ -28,14 +28,19 @@ public partial class Character : CharacterBody3D
     public int maxInputsToConfirm = 250;
     public int lastInputStartToRemove = 0;
     int lastInputConfirmed = -1;
+    CameraController cameraController;
+    public System.Collections.Generic.Dictionary<int, TransformState> clientInterpolationBuffer;
+    private int currentInterpolationTick = -1;
+    private int lastServerTickInterpolated = -1;
 
     // Server Vars //
     public int? tickOffset = null;
     public int lastClientTickProcessed = -1;
+    public int maxInterpolationsTicksToSend = 100;
     public TransformState? lastClientUpdateTransformState = null;
     public System.Collections.Generic.Dictionary<int, InputState> clientInputsToSimulate;
     public int clientCurrentInputToSimulate = -1;
-    public int ignoreOne = 0;
+    public Queue<TransformState> serverTransformsToUpdate;
 
     public RingBuffer<TransformState> TransformStates
     {
@@ -51,7 +56,9 @@ public partial class Character : CharacterBody3D
         characterBody3D = this;
 
         inputsQueue = new Queue<InputState>();
+        serverTransformsToUpdate = new Queue<TransformState>();
 
+        clientInterpolationBuffer = [];
         inputsConfirmed = [];
         inputsToConfirm = [];
         clientInputsToSimulate = [];
@@ -61,7 +68,9 @@ public partial class Character : CharacterBody3D
         startup = GetNode<Startup>("/root/Main");
         tickDelta = 1.0f / Engine.PhysicsTicksPerSecond;
 
-        Position = new Vector3(0, 1.425f, 0);
+        var rng = new RandomNumberGenerator();
+
+        Position = new Vector3(rng.RandfRange(-5f, 5f), 1.425f, rng.RandfRange(-5f, 5f));
 
         if (Multiplayer.IsServer())
         {
@@ -116,6 +125,10 @@ public partial class Character : CharacterBody3D
                 TickClientOwner(tickDelta, currentTick, currentTime);
                 break;
 
+            case SimulationTypes.Client:
+                TickClientInterpolation(tickDelta, currentTick, currentTime);
+                break;
+
             default:
                 break;
         }
@@ -142,12 +155,34 @@ public partial class Character : CharacterBody3D
                 {
                     int difference = clientInputsToSimulate.Count - 250;
 
-                    GD.Print(clientInputsToSimulate.Count);
-
                     for (int i = 0; i < difference; i++)
                     {
                         clientInputsToSimulate.Remove(clientCurrentInputToSimulate);
                         clientCurrentInputToSimulate += 1;
+                    }
+                }
+
+                if (serverTransformsToUpdate.Count > maxInterpolationsTicksToSend)
+                {
+                    int difference = serverTransformsToUpdate.Count - maxInterpolationsTicksToSend;
+
+                    for (int i = 0; i < difference; i++)
+                    {
+                        serverTransformsToUpdate.Dequeue();
+                    }
+                }
+
+                while (serverTransformsToUpdate.Count > 0)
+                {
+                    TransformState state = serverTransformsToUpdate.Dequeue();
+
+                    foreach (KeyValuePair<long, CombatPlayer> keyValuePair in startup.combatPlayers)
+                    {
+                        CombatPlayer combatPlayer = keyValuePair.Value;
+
+                        if (combatPlayer.peerOwner == playerOwner.peerOwner) continue;
+
+                        RpcId(combatPlayer.peerOwner, nameof(ReceiveServerInterpolationState), state.ToDictionary());
                     }
                 }
 
@@ -271,6 +306,7 @@ public partial class Character : CharacterBody3D
 
         MovementSimulation.SimulateCharacterFrame(this, ref input, processTick, delta, ref characterAttributesState);
 
+        lastInputConfirmed += input.tickState.tick - lastInputConfirmed;
         inputsQueue.Enqueue(input);
         inputsToConfirm.Add(processTick, false);
 
@@ -290,19 +326,87 @@ public partial class Character : CharacterBody3D
         DoReconciliation(processTick);
     }
 
-    // Server Methods //
-
-    public void TickServer(float delta, int processTick, ulong timeStamp)
+    public bool TryProcessInterpolationBuffer(float delta, int processTick, ulong timeStamp)
     {
-        int currentTickOffset = playerOwner.pingPong.ClientStats.BufferTicks(playerOwner.pingPong.ClientSendRate, playerOwner.pingPong.TickIntervalMs, minimunTickOffset);
-
-        if (tickOffset == null || currentTickOffset != tickOffset)
+        if (currentInterpolationTick > -1 && clientInterpolationBuffer.TryGetValue(currentInterpolationTick, out TransformState transform))
         {
-            tickOffset = Math.Min(currentTickOffset, minimunTickOffset);
+            int serverTick = currentInterpolationTick;
+            int clientTick = serverTick + (int)tickOffset;
+            bool cantProcess = false;
+
+            if (serverTick < lastServerTickInterpolated || processTick > clientTick)
+            {
+                clientInterpolationBuffer.Remove(currentInterpolationTick);
+                currentInterpolationTick += 1;
+                cantProcess = true;
+                
+                TryProcessInterpolationBuffer(delta, processTick, timeStamp);
+                return false;
+            }
+
+            if (clientTick < processTick)
+            {
+                cantProcess = true;
+            }
+
+            if (!cantProcess)
+            {
+                Position = transform.position;
+                Velocity = transform.velocity;
+
+                CharacterAttributesState characterAttributesState = transform.characterAttributesState;
+
+                moveSpeed = characterAttributesState.moveSpeed;
+                jumpPower = characterAttributesState.jumpPower;
+
+                SaveTick(processTick, new InputState(), timeStamp, characterAttributesState);
+
+                clientInterpolationBuffer.Remove(currentInterpolationTick);
+                lastServerTickInterpolated = currentInterpolationTick;
+                currentInterpolationTick += 1;
+
+                return true;
+            }
+        }
+        else if (currentInterpolationTick > -1)
+        {
+            currentInterpolationTick += 1;
         }
 
+        return false;
+    }
+
+    public void TickClientInterpolation(float delta, int processTick, ulong timeStamp)
+    {
+        if (tickOffset == null)
+        {
+            tickOffset = minimunTickOffset;
+        }
+
+        bool hasProcessedInterpolation = TryProcessInterpolationBuffer(delta, processTick, timeStamp);
+
+        if (hasProcessedInterpolation) return;
+
+        InputState emptyInput = default;
+
+        //GD.Print("manually so ", emptyInput.ToString());
+
+        emptyInput.tickState.tick = processTick;
+        emptyInput.tickState.tickTimestamp = timeStamp;
+
+        CharacterAttributesState newCharacterAttributesState = MovementSimulation.GetCharacterAttributes(this);
+        MovementSimulation.SimulateCharacterFrame(this, ref emptyInput, processTick, delta, ref newCharacterAttributesState);
+
+        SaveTick(processTick, emptyInput, timeStamp, newCharacterAttributesState);
+    }
+
+    // Server Methods //
+    
+    public bool TrySimulateClientInput(float delta, int processTick, ulong timeStamp)
+    {
         if (clientCurrentInputToSimulate > -1 && clientInputsToSimulate.TryGetValue(clientCurrentInputToSimulate, out InputState input))
         {
+            //GD.Print("get");
             int clientTick = clientCurrentInputToSimulate;
             ulong clientTimeStamp = input.tickState.tickTimestamp;
             int serverTick = clientTick + (int)tickOffset;
@@ -310,6 +414,7 @@ public partial class Character : CharacterBody3D
 
             if (!IsInputValid(ref input))
             {
+                //GD.Print("cant process cause invalid input");
                 clientInputsToSimulate.Remove(clientCurrentInputToSimulate);
                 clientCurrentInputToSimulate += 1;
                 cantProcess = true;
@@ -317,18 +422,24 @@ public partial class Character : CharacterBody3D
 
             if (clientTick < lastClientTickProcessed || processTick > serverTick)
             {
+                //GD.Print("cant process cause passed, the precict is ", serverTick, " the current server is ", processTick);
                 clientInputsToSimulate.Remove(clientCurrentInputToSimulate);
                 clientCurrentInputToSimulate += 1;
                 cantProcess = true;
+
+                TrySimulateClientInput(delta, processTick, timeStamp);
+                return false;
             }
 
             if (serverTick < processTick)
             {
                 cantProcess = true;
+                //GD.Print("cant process cause not reached yet");
             }
 
             if (!cantProcess)
             {
+                //GD.Print("prcoess");
                 input.tickState.tick = processTick;
                 input.tickState.tickTimestamp = timeStamp;
 
@@ -342,15 +453,36 @@ public partial class Character : CharacterBody3D
                 clientInputsToSimulate.Remove(clientCurrentInputToSimulate);
                 lastClientTickProcessed = clientCurrentInputToSimulate;
                 clientCurrentInputToSimulate += 1;
-                
-                return;
+
+                serverTransformsToUpdate.Enqueue(transformStates.TryGetByTick(processTick));
+
+                return true;
             }
-        }else if (clientCurrentInputToSimulate > -1) 
+        }
+        else if (clientCurrentInputToSimulate > -1)
         {
             clientCurrentInputToSimulate += 1;
         }
 
+        return false;
+    }
+
+    public void TickServer(float delta, int processTick, ulong timeStamp)
+    {
+        int currentTickOffset = playerOwner.pingPong.ClientStats.BufferTicks(playerOwner.pingPong.ClientSendRate, playerOwner.pingPong.TickIntervalMs, minimunTickOffset);
+
+        if (tickOffset == null || currentTickOffset != tickOffset)
+        {
+            tickOffset = Math.Min(currentTickOffset, minimunTickOffset);
+        }
+
+        bool hasSimulatedInput = TrySimulateClientInput(delta, processTick, timeStamp);
+
+        if (hasSimulatedInput) return;
+
         InputState emptyInput = default;
+
+        //GD.Print("manually so ", emptyInput.ToString());
 
         emptyInput.tickState.tick = processTick;
         emptyInput.tickState.tickTimestamp = timeStamp;
@@ -359,6 +491,8 @@ public partial class Character : CharacterBody3D
         MovementSimulation.SimulateCharacterFrame(this, ref emptyInput, processTick, delta, ref newCharacterAttributesState);
 
         SaveTick(processTick, emptyInput, timeStamp, newCharacterAttributesState);
+
+        serverTransformsToUpdate.Enqueue(transformStates.TryGetByTick(processTick));
     }
     
     public bool IsInputValid(ref InputState input)
@@ -389,7 +523,7 @@ public partial class Character : CharacterBody3D
 
     // RPCS //
     
-    //Those rcps are for the client get the start character data from server
+    //Those rpcs are for the client get the start character data from server
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable, TransferChannel = Startup.CharacterStartDataChannel)]
     public void RequestCharacterStartData()
@@ -407,6 +541,8 @@ public partial class Character : CharacterBody3D
         if (peerOwner == Multiplayer.GetUniqueId())
         {
             characterSimulationType = SimulationTypes.ClientOwner;
+            cameraController = (CameraController) GetTree().Root.GetCamera3D();
+            cameraController.TargetNode = this;
         }
         else
         {
@@ -416,7 +552,7 @@ public partial class Character : CharacterBody3D
         initilized = true;
     }
 
-    //Those rcps are to deal with inputs
+    //Those rpcs are to deal with inputs
 
     [Rpc(MultiplayerApi.RpcMode.Authority, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable, TransferChannel = Startup.CharactersInputsChannel)]
     public void SendCharacterOwnerInputs(Dictionary inputDictionary)
@@ -426,10 +562,8 @@ public partial class Character : CharacterBody3D
         if (GD.Randf() <= 0.10f)
         {
             //GD.Print("packte loss ", newInput.tickState.tick);
-            //return; //lets ignore the client input
+            //return;
         }
-
-        ignoreOne += 1;
 
         clientInputsToSimulate.Add(newInput.tickState.tick, newInput);
 
@@ -468,11 +602,25 @@ public partial class Character : CharacterBody3D
         inputsConfirmed.Add(inputConfirmed);
     }
 
-    //Those rcps are for client reconcilation
+    //Those rpcs are for client reconcilation
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable, TransferChannel = Startup.CharactersReconciliationChannel)]
     public void ReceiveServerReconcilationState(Dictionary transformDictionary)
     {
         lastServerReconciliationState = TransformState.FromDictionary(transformDictionary);
+    }
+
+    //Those rpcs are for client interpolation
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable, TransferChannel = Startup.CharactersReconciliationChannel)]
+    public void ReceiveServerInterpolationState(Dictionary transformDictionary)
+    {
+        TransformState interpolationState = TransformState.FromDictionary(transformDictionary);
+
+        if (currentInterpolationTick == -1 || interpolationState.tickState.tick < currentInterpolationTick)
+        {
+            currentInterpolationTick = interpolationState.tickState.tick;
+        }
+
+        clientInterpolationBuffer.Add(interpolationState.tickState.tick, interpolationState);
     }
 }

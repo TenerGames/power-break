@@ -30,11 +30,14 @@ public partial class CombatPlayer : Node
             Character mainCharacter = GD.Load<PackedScene>("res://Shared/Prefabs/character.tscn").Instantiate<Character>();
             mainCharacter.playerOwner = this;
 
+            mainCharacter.Name = "Character_" + peerOwner;
+
             charactersNode.AddChild(mainCharacter);
             controllingCharacters.Add("Main", mainCharacter);
 
             pingPong = GD.Load<PackedScene>("res://Shared/Prefabs/ping.tscn").Instantiate<PingPong>();
             pingPong.peerOwner = peerOwner;
+            pingPong.Name = "PingPong_" + peerOwner;
 
             pingsNode.AddChild(pingPong);
         }

@@ -1,6 +1,7 @@
-[gd_scene load_steps=4 format=3 uid="uid://deubt5tfybrt"]
+[gd_scene load_steps=5 format=3 uid="uid://deubt5tfybrt"]
 
 [ext_resource type="Script" uid="uid://c11d4qfa77cjh" path="res://Client/Scripts/MainClientCombat.cs" id="1_x0anw"]
+[ext_resource type="Script" uid="uid://c5mftdye443ly" path="res://Client/Scripts/CameraController.cs" id="2_2ii72"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_2ii72"]
 
@@ -39,6 +40,7 @@ shape = SubResource("BoxShape3D_ujcvs")
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.778936, 17.679035)
+script = ExtResource("2_2ii72")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.0030717365, 0.9999953, 0, -0.9999953, 0.0030717365, 0, 7.4093513, 0)

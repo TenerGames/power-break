@@ -10,13 +10,13 @@ public class MovementSimulation
         bool jumped = false;
 
         if (Input.IsActionPressed("move_forward"))
-            inputDirectionFloat.Y -= 1;
-        if (Input.IsActionPressed("move_backward"))
             inputDirectionFloat.Y += 1;
+        if (Input.IsActionPressed("move_backward"))
+            inputDirectionFloat.Y -= 1;
         if (Input.IsActionPressed("move_left"))
-            inputDirectionFloat.X -= 1;
-        if (Input.IsActionPressed("move_right"))
             inputDirectionFloat.X += 1;
+        if (Input.IsActionPressed("move_right"))
+            inputDirectionFloat.X -= 1;
         if (Input.IsActionPressed("jump"))
             jumped = true;
 
@@ -26,7 +26,7 @@ public class MovementSimulation
         return new InputState(vectorsDeterministiced[0], vectorsDeterministiced[1], jumped, new TickState(processTick, timeStamp));
     }
     
-    public static void SimulateInputMovement(ref InputState input, ref CharacterBody3D characterBody3D, ref CharacterAttributesState characterAttributesState)
+    public static void SimulateInputMovement(float delta, ref InputState input, ref CharacterBody3D characterBody3D, ref CharacterAttributesState characterAttributesState)
     {
         Vector2I inputDirection = input.inputDirection;
         Vector2I inputDirectionFraction = input.inputDirectionFraction;
@@ -34,9 +34,13 @@ public class MovementSimulation
         Vector2 moveDirection = MathUtils.VectorDeterministicedToFloatVector(ref inputDirection, ref inputDirectionFraction) * characterAttributesState.moveSpeed;
         Vector3 currentVelocity = characterBody3D.Velocity;
 
-        float y = input.jumped && characterBody3D.IsOnFloor() ? currentVelocity.Y + characterAttributesState.jumpPower : currentVelocity.Y;
+        bool onFloor = characterBody3D.IsOnFloor();
 
-        characterBody3D.Velocity = new Vector3(moveDirection.X, y, moveDirection.Y);
+        float x = onFloor ? moveDirection.X : currentVelocity.X > 0 ? Math.Max(currentVelocity.X - (delta * 5), 0.0F) : Math.Min(currentVelocity.X + (delta * 5), 0.0F);
+        float y = input.jumped && onFloor ? currentVelocity.Y + characterAttributesState.jumpPower : currentVelocity.Y;
+        float z = onFloor ? moveDirection.Y : currentVelocity.Z > 0 ? Math.Max(currentVelocity.Z - (delta * 5), 0.0F) : Math.Min(currentVelocity.Z + (delta * 5), 0.0F);
+
+        characterBody3D.Velocity = new Vector3(x, y, z);
     }
 
     public static void SimulateGravity(ref CharacterBody3D characterBody3D, float gravity, float delta)
@@ -48,7 +52,7 @@ public class MovementSimulation
 
     public static CharacterAttributesState GetCharacterAttributes(Character character)
     {
-        return new CharacterAttributesState(character.moveSpeed, character.jumpPower);
+        return new CharacterAttributesState(character.moveSpeed, character.jumpPower, character.GetCharacterGravity());
     }
 
     public static TransformState GenerateTransformState(ref CharacterBody3D characterBody3, int processTick, ulong timeStamp, CharacterAttributesState characterAttributesState)
@@ -60,7 +64,7 @@ public class MovementSimulation
     {
         CharacterBody3D characterBody3D = character;
 
-        SimulateInputMovement(ref input, ref characterBody3D, ref characterAttributesState);
+        SimulateInputMovement(delta, ref input, ref characterBody3D, ref characterAttributesState);
         SimulateGravity(ref characterBody3D, character.GetCharacterGravity(), delta);
         character.MoveAndSlide();
     }
