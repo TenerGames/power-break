@@ -22,7 +22,8 @@ public partial class Character : CharacterBody3D
     // Client Vars //
     public TransformState? lastServerReconciliationState = default;
     public TransformState lastProcessedReconciliationState = default;
-    public Godot.Collections.Dictionary<int,bool> inputsToConfirm;
+    public Godot.Collections.Dictionary<int, bool> inputsToConfirm;
+    public System.Collections.Generic.Dictionary<int, InputState> waitingToConfirmInputs;
     public Array<int> inputsConfirmed;
     public bool initilized = false;
     public int maxInputsToConfirm = 250;
@@ -37,7 +38,7 @@ public partial class Character : CharacterBody3D
     public int? tickOffset = null;
     public int lastClientTickProcessed = -1;
     public int maxInterpolationsTicksToSend = 100;
-    public TransformState? lastClientUpdateTransformState = null;
+    public Queue<TransformState> clientUpdateTransformState;
     public System.Collections.Generic.Dictionary<int, InputState> clientInputsToSimulate;
     public int clientCurrentInputToSimulate = -1;
     public Queue<TransformState> serverTransformsToUpdate;
@@ -57,7 +58,9 @@ public partial class Character : CharacterBody3D
 
         inputsQueue = new Queue<InputState>();
         serverTransformsToUpdate = new Queue<TransformState>();
+        clientUpdateTransformState = new Queue<TransformState>();
 
+        waitingToConfirmInputs = [];
         clientInterpolationBuffer = [];
         inputsConfirmed = [];
         inputsToConfirm = [];
@@ -146,9 +149,11 @@ public partial class Character : CharacterBody3D
 
             case SimulationTypes.Server:
 
-                if (lastClientUpdateTransformState != null)
+                while (clientUpdateTransformState.Count > 0)
                 {
-                    RpcId(playerOwner.peerOwner, nameof(ReceiveServerReconcilationState), ((TransformState)lastClientUpdateTransformState).ToDictionary());
+                    TransformState transformState = clientUpdateTransformState.Dequeue();
+
+                    RpcId(playerOwner.peerOwner, nameof(ReceiveServerReconcilationState), transformState.ToDictionary());
                 }
 
                 if (clientInputsToSimulate.Count > 250)
@@ -224,13 +229,24 @@ public partial class Character : CharacterBody3D
                 {
                     for (int tickUnconfirmed = expectedToConfirm; tickUnconfirmed < tick; tickUnconfirmed++)
                     {
+                        InputState unconfirmedState = inputStates.TryGetByTick(tickUnconfirmed);
+
                         inputsToConfirm.Remove(tickUnconfirmed);
                         ticksNotConfirmed.Add(tickUnconfirmed);
+                        waitingToConfirmInputs.Add(tickUnconfirmed, unconfirmedState);
+                
+                        inputStates.Push(tickUnconfirmed, default);
                     }
                 }
 
                 lastInputConfirmed = tick;
                 inputsToConfirm.Remove(tick);
+
+                if (waitingToConfirmInputs.TryGetValue(tick, out InputState confirmedInput))
+                {
+                    inputStates.Push(tick, confirmedInput);
+                    waitingToConfirmInputs.Remove(tick);
+                }
             }
 
             ticksConfirmed.Add(i);
@@ -265,7 +281,7 @@ public partial class Character : CharacterBody3D
 
         if (distanceFromServer >= 0.01f)
         {
-            GD.Print("Distance from server position is ", distanceFromServer, " so lets reconcilate");
+            //GD.Print("Distance from server position is ", distanceFromServer, " so lets reconcilate");
 
             Position = lastServerReconciliationState.position;
             Velocity = lastServerReconciliationState.velocity;
@@ -448,7 +464,7 @@ public partial class Character : CharacterBody3D
 
                 SaveTick(processTick, input, timeStamp, characterAttributesState);
 
-                lastClientUpdateTransformState = MovementSimulation.GenerateTransformState(ref characterBody3D, clientTick, clientTimeStamp, characterAttributesState);
+                clientUpdateTransformState.Enqueue(MovementSimulation.GenerateTransformState(ref characterBody3D, clientTick, clientTimeStamp, characterAttributesState));
 
                 clientInputsToSimulate.Remove(clientCurrentInputToSimulate);
                 lastClientTickProcessed = clientCurrentInputToSimulate;
@@ -541,8 +557,8 @@ public partial class Character : CharacterBody3D
         if (peerOwner == Multiplayer.GetUniqueId())
         {
             characterSimulationType = SimulationTypes.ClientOwner;
-            cameraController = (CameraController) GetTree().Root.GetCamera3D();
-            cameraController.TargetNode = this;
+            cameraController = (CameraController)GetTree().Root.GetCamera3D();
+            cameraController.SetTargetNode(this);
         }
         else
         {
@@ -611,6 +627,7 @@ public partial class Character : CharacterBody3D
     }
 
     //Those rpcs are for client interpolation
+
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable, TransferChannel = Startup.CharactersReconciliationChannel)]
     public void ReceiveServerInterpolationState(Dictionary transformDictionary)
     {

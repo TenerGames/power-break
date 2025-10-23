@@ -36,9 +36,9 @@ public class MovementSimulation
 
         bool onFloor = characterBody3D.IsOnFloor();
 
-        float x = onFloor ? moveDirection.X : currentVelocity.X > 0 ? Math.Max(currentVelocity.X - (delta * 5), 0.0F) : Math.Min(currentVelocity.X + (delta * 5), 0.0F);
+        float x = onFloor ? moveDirection.X : currentVelocity.X > 0 ? Math.Max(currentVelocity.X - (delta * 15), 0.0F) : Math.Min(currentVelocity.X + (delta * 15), 0.0F);
         float y = input.jumped && onFloor ? currentVelocity.Y + characterAttributesState.jumpPower : currentVelocity.Y;
-        float z = onFloor ? moveDirection.Y : currentVelocity.Z > 0 ? Math.Max(currentVelocity.Z - (delta * 5), 0.0F) : Math.Min(currentVelocity.Z + (delta * 5), 0.0F);
+        float z = onFloor ? moveDirection.Y : currentVelocity.Z > 0 ? Math.Max(currentVelocity.Z - (delta * 15), 0.0F) : Math.Min(currentVelocity.Z + (delta * 15), 0.0F);
 
         characterBody3D.Velocity = new Vector3(x, y, z);
     }

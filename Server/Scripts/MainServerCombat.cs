@@ -13,9 +13,9 @@ public partial class MainServerCombat : Node
     {
         base._Ready();
 
-        //DisplayServer.WindowSetPosition(new Vector2I(1920 / 2, 100));
-        //DisplayServer.WindowSetSize(new Vector2I(960, 540)); 
-        //DisplayServer.WindowSetTitle("Server");
+        DisplayServer.WindowSetPosition(new Vector2I(1920 / 2, 100));
+        DisplayServer.WindowSetSize(new Vector2I(960, 540)); 
+        DisplayServer.WindowSetTitle("Server");
 
         startup = GetNode<Startup>("/root/Main");
     }
